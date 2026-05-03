@@ -76,7 +76,7 @@ class SixWheelRobot:
         await self._move_task
 
     async def stop(self):
-        """KAPTANIN İSTEDİĞİ: Rampasız, direkt 0'a çekiş ve senkron frenleme."""
+      
         print("\n--- ACİL SENKRON FRENLEME TETİKLENDİ ---")
         
         if self._move_task and not self._move_task.done():
