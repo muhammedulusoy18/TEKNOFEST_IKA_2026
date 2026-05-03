@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<package format3>
+  <name>teknofest_ika</name>
+  <version>0.0.0</version>
+  <description>TEKNOFEST IKA 2026 Paketi</description>
+  <maintainer email="yusuf@todo.todo">Yusuf</maintainer>
+  <license>Apache License 2.0</license>
+  <depend>rclpy</depend>
+  <depend>std_msgs</depend>
+  <export><build_type>ament_python</build_type></export>
+</package>

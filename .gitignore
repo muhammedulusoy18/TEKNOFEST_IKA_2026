@@ -4,3 +4,12 @@ env/
 .env
 *.pyc
 *.txt
+# IDE ve Sistem Dosyaları
+.idea/               
+.vscode/             
+.DS_Store            
+package.xml.save   
+
+build/
+install/
+log/
