@@ -22,7 +22,7 @@ setup(
     description='TEKNOFEST 2026 İnsansız Kara Aracı (İKA) ROS 2 Ana Paketi',
     license='Apache-2.0',
 
-    # İŞTE BÜTÜN FİLONUN HARİTASI BURADA:
+
     entry_points={
         'console_scripts': [
             # 1. BEYİN: Tüm kararları veren ana merkez (vehicle_manager'ın ROS hali)
@@ -38,7 +38,7 @@ setup(
             'sensor_node = teknofest_ika.nodes.sensor_node:main',
 
             # 5. YER İSTASYONU: Hatice'nin yazacağı arayüzü (GUI) ROS ağına bağlayan node
-            'gui_node = teknofest_ika.nodes.gui_node:main',
+            ##'gui_node = teknofest_ika.nodes.gui_node:main',
         ],
     },
 )
