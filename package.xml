@@ -1,11 +1,25 @@
 <?xml version="1.0"?>
-<package format3>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
   <name>teknofest_ika</name>
-  <version>0.0.0</version>
-  <description>TEKNOFEST IKA 2026 Paketi</description>
-  <maintainer email="yusuf@todo.todo">Yusuf</maintainer>
-  <license>Apache License 2.0</license>
+  <version>0.0.1</version>
+  <description>TEKNOFEST 2026 İnsansız Kara Aracı (İKA) ROS 2 Ana Paketi</description>
+
+  <maintainer email="yusuf@todo.todo">Yusuf ve Muhammed Ulusoy</maintainer>
+  <license>Apache-2.0</license>
+
+  <!-- Temel ROS 2 Python Kütüphanesi -->
   <depend>rclpy</depend>
+
+  <!-- Mesaj Tipleri -->
   <depend>std_msgs</depend>
-  <export><build_type>ament_python</build_type></export>
+  <depend>geometry_msgs</depend>
+  <depend>sensor_msgs</depend>
+
+  <!-- OpenCV ve ROS 2 Görüntü Köprüsü (Gözler ve Arayüz İçin Kritik) -->
+  <depend>cv_bridge</depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
 </package>
