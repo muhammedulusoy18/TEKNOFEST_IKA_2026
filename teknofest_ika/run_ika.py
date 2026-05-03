@@ -20,7 +20,7 @@ except ImportError:
 # 3. Kendi Modüllerimizi İçe Aktarma
 # Not: Bunlar sys.path ayarından SONRA gelmelidir
 try:
-    from core.vehicle_manager import VehicleManager
+    from teknofest_ika.core.vehicle_manager import VehicleManager
     from modules.perception import PerceptionUnit
 except ImportError as e:
     print(f"[HATA] Modüller içe aktarılamadı: {e}")

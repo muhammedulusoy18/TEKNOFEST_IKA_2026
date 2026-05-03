@@ -1,8 +1,8 @@
 import cv2
 import threading
-import modules.pid_thread as pid_ctrl
-from modules.perception import PerceptionUnit
-from utils.camera_handler import CameraHandler
+import teknofest_ika.modules.pid_thread as pid_ctrl
+from teknofest_ika.modules.perception import PerceptionUnit
+from teknofest_ika.utils.camera_handler import CameraHandler
 
 
 class VehicleManager:
@@ -35,9 +35,13 @@ class VehicleManager:
                 # 2. Klavye Okuma
                 key = cv2.waitKey(1) & 0xFF
 
-                # Tuşa basıldıysa işleme al
                 if key != 255:
                     self._handle_keyboard(key)
+                else:
+                    # EĞER TUŞA BASILMIYORSA VE MANUEL MODDAYSAK FREN YAP!
+                    if self.manual_override:
+                        pid_ctrl.sp_l, pid_ctrl.sp_r = 0.0, 0.0
+                # Tuşa basıldıysa işleme al
 
                 # 3. Motor Kontrolü
                 # Eğer manuel override varsa otonomi komutlarını yoksay
