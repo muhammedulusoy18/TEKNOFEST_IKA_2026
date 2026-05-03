@@ -5,7 +5,7 @@
   <version>0.0.1</version>
   <description>TEKNOFEST 2026 İnsansız Kara Aracı (İKA) ROS 2 Ana Paketi</description>
 
-  <maintainer email="yusuf@todo.todo">Yusuf ve Muhammed Ulusoy</maintainer>
+  <maintainer email="yusuf@todo.todo">Yusuf Tufan ve Muhammed Ulusoy</maintainer>
   <license>Apache-2.0</license>
 
   <!-- Temel ROS 2 Python Kütüphanesi -->
