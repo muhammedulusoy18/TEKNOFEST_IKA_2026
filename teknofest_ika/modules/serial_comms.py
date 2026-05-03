@@ -3,7 +3,7 @@ import math
 from enum import Enum
 from unittest.mock import MagicMock
 
-# --- DONANIM TAKLİT SİSTEMİ (MAGICMOCK) ---
+
 try:
     import smbus2
     import serial
@@ -12,13 +12,10 @@ except ImportError:
     print("UYARI: smbus2 veya pyserial bulunamadı! MagicMock Simülasyonu aktif.")
     HARDWARE_MODE = False
     
-    # Donanım kütüphanelerini MagicMock ile simüle ediyoruz
+
     smbus2 = MagicMock()
     serial = MagicMock()
-    
-    # SMBus(1) çağrıldığında hata vermemesi için bir nesne döndürmesini sağlıyoruz
     smbus2.SMBus.return_value = MagicMock()
-    # serial.Serial çağrıldığında in_waiting gibi niteliklere sahip bir mock döndürür
     serial.Serial.return_value = MagicMock(in_waiting=0)
 
 # --- CRC8 CALCULATION ---
