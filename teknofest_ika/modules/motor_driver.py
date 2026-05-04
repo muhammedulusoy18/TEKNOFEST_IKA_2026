@@ -57,14 +57,13 @@ class SixWheelRobot:
             m.lines["forward"].set_value(1 if direction == "forward" else 0)
             m.lines["backward"].set_value(0 if direction == "forward" else 1)
 
+           
         while abs(target - self.left.active_speed) > 0.1:
             new_speed = self.left.active_speed + step
             if new_speed > target: new_speed = target
-            
             duty = int(self.left.period * (new_speed / 100))
             self.left._write_pwm("duty_cycle", duty)
             self.right._write_pwm("duty_cycle", duty)
-            
             self.left.active_speed = self.right.active_speed = new_speed
             print(f"[ROBOT] Hız: %{new_speed:.1f}")
             await asyncio.sleep(0.01)
@@ -88,12 +87,10 @@ class SixWheelRobot:
         self.right.lines["forward"].set_value(1)
         self.right.lines["backward"].set_value(1)
         
-        # 2. TAM GÜÇ FREN: Duty cycle'ı direkt periyoda eşitle (%100)
         self.left._write_pwm("duty_cycle", self.left.period)
         self.right._write_pwm("duty_cycle", self.right.period)
         
         self.left.active_speed = self.right.active_speed = 0
-
         print("[ROBOT] >>> TAM SENKRON AKTİF FRENLEME YAPILDI <<<")
         print("[ROBOT] DURUM: KİLİTLİ | GÜÇ: %100 | FREKANS: 20kHz")
 
