@@ -12,18 +12,20 @@ except ImportError:
 class MotorDriver:
     def __init__(self, forward_pin, backward_pin, pwm_no=0, name="motor"):
         self.name = name
-        self.period = 50000  # 20 kHz (50.000 ns)
+        self.period = 50000  # 20 kHz
         self.active_speed = 0
         self.is_simulated = not os.path.exists("/sys/class/pwm/pwmchip0")
 
-        # GPIO Ayarları
-        self.chip = gpiod.Chip("gpiochip0")
-        self.lines = {
-            "forward": self.chip.get_line(forward_pin),
-            "backward": self.chip.get_line(backward_pin)
-        }
-        for line in self.lines.values():
-            line.request(consumer=name, type=gpiod.LINE_REQ_DIR_OUT)
+        try:
+            self.chip = gpiod.Chip("gpiochip0")
+            self.lines = {
+                "forward": self.chip.get_line(forward_pin),
+                "backward": self.chip.get_line(backward_pin)
+            }
+            for line in self.lines.values():
+                line.request(consumer=name, type=gpiod.LINE_REQ_DIR_OUT)
+        except Exception:
+            self.lines = {"forward": MagicMock(), "backward": MagicMock()}
 
         self.pwm_path = f"/sys/class/pwm/pwmchip0/pwm{pwm_no}"
         self._setup_pwm(pwm_no)
@@ -45,69 +47,103 @@ class MotorDriver:
             except: pass
 
 class SixWheelRobot:
-    def __init__(self, left, right, relay):
-        self.left = left
-        self.right = right
-        self.relay = relay
-        self._move_task = None
+    def __init__(self, left_motor, right_motor):
+        self.left = left_motor
+        self.right = right_motor
+        self._current_task = None
+        self.MAX_SPEED = 100.0
+        self.MIN_SPEED = 0.0
 
-    async def _accelerate(self, target, direction, step=5):
-        """Sadece kalkışta senkron rampa yapar."""
-        for m in [self.left, self.right]:
-            m.lines["forward"].set_value(1 if direction == "forward" else 0)
-            m.lines["backward"].set_value(0 if direction == "forward" else 1)
+    async def _execute_movement(self, left_target, right_target, step=5):
+        """Hızlanma ve yavaşlamayı kademeli yapar ve terminale yazdırır."""
+        left_target = max(min(left_target, self.MAX_SPEED), -self.MAX_SPEED)
+        right_target = max(min(right_target, self.MAX_SPEED), -self.MAX_SPEED)
 
-           
-        while abs(target - self.left.active_speed) > 0.1:
-            new_speed = self.left.active_speed + step
-            if new_speed > target: new_speed = target
-            duty = int(self.left.period * (new_speed / 100))
-            self.left._write_pwm("duty_cycle", duty)
-            self.right._write_pwm("duty_cycle", duty)
-            self.left.active_speed = self.right.active_speed = new_speed
-            print(f"[ROBOT] Hız: %{new_speed:.1f}")
-            await asyncio.sleep(0.01)
+        while True:
+            changed = False
+            for m, target in [(self.left, left_target), (self.right, right_target)]:
+                if abs(m.active_speed - target) > 0.1:
+                    if m.active_speed < target:
+                        m.active_speed = min(m.active_speed + step, target)
+                    else:
+                        m.active_speed = max(m.active_speed - step, target)
+                    
+                    m.lines["forward"].set_value(1 if m.active_speed > 0 else 0)
+                    m.lines["backward"].set_value(1 if m.active_speed < 0 else 0)
+                    
+                    duty = int(m.period * (abs(m.active_speed) / 100))
+                    m._write_pwm("duty_cycle", duty)
+                    changed = True
+            
+            if changed:
+                # Terminalde hız değişimini takip etmek için eklenen kısım
+                print(f"   >> Hız Güncellendi: Sol %{self.left.active_speed:.1f} | Sağ %{self.right.active_speed:.1f}")
+            else:
+                break
+                
+            await asyncio.sleep(0.05) # Terminal takibi için ideal süre
+
+    async def _start_task(self, left_speed, right_speed):
+        if self._current_task and not self._current_task.done():
+            self._current_task.cancel()
+            try: await self._current_task
+            except asyncio.CancelledError: pass
+        
+        self._current_task = asyncio.create_task(self._execute_movement(left_speed, right_speed))
+        await self._current_task
 
     async def move_forward(self, speed):
-        print(f"\n--- HAREKET: %{speed} ---")
-        self.relay.forward_mode()
-        self._move_task = asyncio.create_task(self._accelerate(speed, "forward"))
-        await self._move_task
+        print(f"\n[HAREKET] Hedef İleri %{speed}")
+        await self._start_task(speed, speed)
+
+    async def move_backward(self, speed):
+        print(f"\n[HAREKET] Hedef Geri %{speed}")
+        await self._start_task(-speed, -speed)
+
+    async def turn_left_tank(self, speed):
+        print(f"\n[DÖNÜŞ] Hedef Tank Sola %{speed}")
+        await self._start_task(-speed, speed)
+
+    async def turn_right_tank(self, speed):
+        print(f"\n[DÖNÜŞ] Hedef Tank Sağa %{speed}")
+        await self._start_task(speed, -speed)
 
     async def stop(self):
-      
-        print("\n--- ACİL SENKRON FRENLEME TETİKLENDİ ---")
-        
-        if self._move_task and not self._move_task.done():
-            self._move_task.cancel()
+        print("\n[SİSTEM] Durduruluyor...")
+        await self._start_task(0, 0)
 
-        # 1. SENKRON KİLİTLEME: Tüm pinleri aynı anda HIGH yap
-        self.left.lines["forward"].set_value(1)
-        self.left.lines["backward"].set_value(1)
-        self.right.lines["forward"].set_value(1)
-        self.right.lines["backward"].set_value(1)
-        
-        self.left._write_pwm("duty_cycle", self.left.period)
-        self.right._write_pwm("duty_cycle", self.right.period)
-        
-        self.left.active_speed = self.right.active_speed = 0
-        print("[ROBOT] >>> TAM SENKRON AKTİF FRENLEME YAPILDI <<<")
-        print("[ROBOT] DURUM: KİLİTLİ | GÜÇ: %100 | FREKANS: 20kHz")
-
-# --- ÇALIŞTIRMA ---
 async def main():
-    relay = MagicMock()
-    relay.forward_mode = lambda: print("[RÖLE] İleri Mod")
+    sol = MotorDriver(forward_pin=17, backward_pin=18, pwm_no=0, name="Sol_Grup")
+    sag = MotorDriver(forward_pin=27, backward_pin=22, pwm_no=1, name="Sag_Grup")
+    ika = SixWheelRobot(left_motor=sol, right_motor=sag)
     
-    robot = SixWheelRobot(
-        MotorDriver(17, 18, 0, "SOL"), 
-        MotorDriver(22, 23, 1, "SAG"), 
-        relay
-    )
+    print("--- IKA_2026 Kontrol Sistemi Başlatıldı ---")
 
-    await robot.move_forward(60)
-    await asyncio.sleep(2)
-    await robot.stop()
+    try:
+        # Örnek Senaryo
+        print("ileri test başlatıldı")
+        await ika.move_forward(50)
+        await asyncio.sleep(1)
+
+        print("tank dönüş sistemı başlatıldı")
+        await ika.turn_right_tank(40)
+        await asyncio.sleep(1)
+
+        print(" geri  test başlatıldı")
+        await ika.move_backward(50)
+        await asyncio.sleep(1)
+
+        
+        await ika.stop()
+    finally:
+        await ika.stop()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\nKullanıcı durdurdu.")
+       
+
+
+
