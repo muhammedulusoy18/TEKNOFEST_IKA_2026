@@ -1,0 +1,452 @@
+#laserControlPanel {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+#laserPanelTitle {
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 800;
+}
+
+#laserInfoLabel {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+#laserPrimaryButton {
+  background: var(--red);
+  border: 1px solid var(--red);
+  color: white;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-weight: 700;
+}
+
+#laserPrimaryButton:hover {
+  border: 1px solid var(--yellow);
+}
+
+#laserSecondaryButton {
+  background: var(--blue);
+  border: 1px solid var(--blue);
+  color: white;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-weight: 700;
+}
+
+#laserSecondaryButton:hover {
+  border: 1px solid var(--cyan);
+}
+
+#laserResetButton {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-weight: 700;
+}
+#missionPlaceholder {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+#missionPlaceholderTitle {
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+#missionPlaceholderInfo {
+  color: var(--muted);
+  font-size: 13px;
+}
+#pageSwitchButton {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 8px 14px;
+  border-radius: 10px;
+  font-weight: 700;
+}
+
+#pageSwitchButton:hover {
+  border: 1px solid var(--blue);
+}
+
+#pageTitle {
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 800;
+  padding: 4px 2px;
+}
+
+#missionInfoLabel {
+  color: var(--muted);
+  font-size: 13px;
+}
+/* ===============================
+   BASE
+   =============================== */
+
+QMainWindow {
+  background: var(--bg);
+  color: var(--text);
+}
+
+QWidget {
+  color: var(--text);
+}
+
+/* ===============================
+   TOOLBAR / STATUSBAR
+   =============================== */
+
+QToolBar {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  spacing: 10px;
+  padding: 6px;
+}
+
+QStatusBar {
+  background: var(--panel);
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+}
+
+/* ===============================
+   DOCK
+   =============================== */
+
+QDockWidget {
+  border: 1px solid var(--border);
+}
+
+QDockWidget::title {
+  background: var(--panel);
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-weight: 700;
+}
+
+/* ===============================
+   CARDS
+   =============================== */
+
+#VideoCard,
+#Indicator {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+#VideoTitle {
+  color: var(--muted);
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+#VideoCanvas {
+  border-radius: 10px;
+  border: 1px dashed var(--border);
+  color: var(--muted);
+  padding: 12px;
+  qproperty-alignment: AlignCenter;
+}
+
+/* ===============================
+   INDICATOR
+   =============================== */
+
+#Indicator {
+  padding: 6px 10px;
+}
+
+#IndicatorLabel {
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+#IndicatorValue {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* ===============================
+   ACCENT BORDER
+   =============================== */
+
+#Indicator[accent="orange"] { border: 1px solid var(--orange); }
+#Indicator[accent="purple"] { border: 1px solid var(--purple); }
+#Indicator[accent="blue"]   { border: 1px solid var(--blue); }
+
+/* 🔥 FIX BURASI */
+#Indicator[accent="cyan"]   { border: 1px solid var(--cyan); }
+
+#Indicator[accent="pink"]   { border: 1px solid var(--pink); }
+#Indicator[accent="yellow"] { border: 1px solid var(--yellow); }
+#Indicator[accent="red"]    { border: 1px solid var(--red); }
+#Indicator[accent="green"]  { border: 1px solid var(--green); }
+
+/* ===============================
+   ACCENT VALUE COLORS
+   =============================== */
+
+#Indicator[accent="yellow"] #IndicatorValue { color: var(--yellow); }
+#Indicator[accent="red"]    #IndicatorValue { color: var(--red); }
+
+/* 🔥 FIX BURASI */
+#Indicator[accent="cyan"]   #IndicatorValue { color: var(--cyan); }
+
+#Indicator[accent="blue"]   #IndicatorValue { color: var(--blue); }
+#Indicator[accent="orange"] #IndicatorValue { color: var(--orange); }
+#Indicator[accent="purple"] #IndicatorValue { color: var(--purple); }
+#Indicator[accent="pink"]   #IndicatorValue { color: var(--pink); }
+#Indicator[accent="green"]  #IndicatorValue { color: var(--green); }
+
+/* ===============================
+   BUTTONS
+   =============================== */
+
+QPushButton {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-weight: 700;
+}
+
+QPushButton:hover {
+  border: 1px solid var(--blue);
+}
+/* ===============================
+   TOOLBAR BUTTONS
+   =============================== */
+
+#toolbarEStopButton {
+  background-color: var(--red);
+  color: white;
+  font-weight: 800;
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--red);
+}
+
+#toolbarEStopButton:hover {
+  border: 1px solid var(--yellow);
+}
+
+#toolbarPageButton {
+  padding: 6px 12px;
+  border-radius: 6px;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  background-color: var(--panel);
+  font-weight: 700;
+}
+
+#toolbarPageButton:hover {
+  color: var(--text);
+  border: 1px solid var(--blue);
+}
+
+#toolbarPageButton[active="true"] {
+  color: var(--text);
+  background-color: var(--card);
+  border: 1px solid var(--blue);
+}
+
+#toolbarPageButton[pageRole="mission"][active="true"] {
+  border: 1px solid var(--green);
+}
+
+#toolbarThemeButton {
+  padding: 6px 10px;
+  border-radius: 6px;
+  color: var(--muted);
+  background-color: transparent;
+  border: 1px solid transparent;
+}
+
+#toolbarThemeButton:hover {
+  color: var(--text);
+  background-color: var(--panel);
+  border: 1px solid var(--border);
+}
+
+/* ===============================
+   E-STOP
+   =============================== */
+
+#EStopButton {
+  background: var(--red);
+  border: 1px solid var(--red);
+  color: white;
+  font-size: 18px;
+  padding: 14px;
+  border-radius: 12px;
+}
+
+#EStopButton:hover {
+  border: 2px solid var(--yellow);
+}
+
+/* ===============================
+   TOAST
+   =============================== */
+
+#Toast {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 14px;
+  color: var(--text);
+  font-weight: 800;
+}
+
+#Toast[kind="danger"] { border: 1px solid var(--red); }
+#Toast[kind="warn"]   { border: 1px solid var(--yellow); }
+#Toast[kind="ok"]     { border: 1px solid var(--green); }
+#Toast[kind="info"]   { border: 1px solid var(--blue); }
+
+/* ===============================
+   EDITORS
+   =============================== */
+
+QPlainTextEdit {
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px;
+}
+
+QLineEdit {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px;
+}
+
+/* ===============================
+   TOOL BUTTON
+   =============================== */
+
+QToolButton {
+  color: var(--text);
+}
+
+QToolButton:hover {
+  background: var(--card);
+}
+
+/* ===============================
+   SIDE PANELS
+   =============================== */
+
+#SidePanel {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+#SidePanelTitle {
+  color: var(--text);
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+/* ===============================
+   AUTONOMY PANEL
+   =============================== */
+
+#autonomyPanel {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+#autonomyPanelTitle {
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+#autonomyButton {
+  background: var(--red);
+  color: white;
+  padding: 12px;
+  font-size: 16px;
+  font-weight: 700;
+  border-radius: 8px;
+  border: 1px solid var(--red);
+}
+
+#autonomyButton:hover {
+  border: 1px solid var(--yellow);
+}
+
+/* ===============================
+   MANUAL DRIVE PANEL
+   =============================== */
+
+#manualDrivePanel {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+#manualDriveTitle {
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+#manualSectionLabel,
+#manualSpeedLabel,
+#manualModeInfo {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+#manualSpeedSlider::groove:horizontal {
+  background: var(--border);
+  height: 6px;
+  border-radius: 3px;
+}
+
+#manualSpeedSlider::handle:horizontal {
+  background: var(--blue);
+  width: 14px;
+  margin: -4px 0;
+  border-radius: 7px;
+}
+
+#manualModeButton {
+  padding: 8px;
+  border-radius: 8px;
+  font-weight: 700;
+  color: white;
+}
+
+#manualModeButton[state="active"] {
+  background: var(--green);
+  border: 1px solid var(--green);
+}
+
+#manualModeButton[state="passive"] {
+  background: var(--red);
+  border: 1px solid var(--red);
+}
