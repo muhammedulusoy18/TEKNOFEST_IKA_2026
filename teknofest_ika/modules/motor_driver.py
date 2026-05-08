@@ -2,147 +2,246 @@ import asyncio
 import os
 from unittest.mock import MagicMock
 
-# --- DONANIM YAPILANDIRMASI ---
 try:
     import gpiod
 except ImportError:
     gpiod = MagicMock()
-    gpiod.Chip.return_value.get_line.return_value = MagicMock()
+    gpiod.LINE_REQ_DIR_OUT = 1
+    gpiod.LINE_REQ_DIR_IN = 2
 
 class MotorDriver:
-    def __init__(self, forward_pin, backward_pin, pwm_no=0, name="motor"):
+    def __init__(self, forward_pin, backward_pin, pwm_no, name="motor"):
         self.name = name
-        self.period = 50000  # 20 kHz
+        self.period = 50000          # 20kHz PWM
         self.active_speed = 0
-        self.is_simulated = not os.path.exists("/sys/class/pwm/pwmchip0")
+        self.last_speed = None       
+
+        self.simulated = not os.path.exists("/sys/class/pwm/pwmchip0")
+        self.pwm_path = f"/sys/class/pwm/pwmchip0/pwm{pwm_no}"
 
         try:
             self.chip = gpiod.Chip("gpiochip0")
-            self.lines = {
-                "forward": self.chip.get_line(forward_pin),
-                "backward": self.chip.get_line(backward_pin)
-            }
-            for line in self.lines.values():
-                line.request(consumer=name, type=gpiod.LINE_REQ_DIR_OUT)
-        except Exception:
-            self.lines = {"forward": MagicMock(), "backward": MagicMock()}
+            self.forward = self.chip.get_line(forward_pin)
+            self.backward = self.chip.get_line(backward_pin)
+            self.forward.request(name, gpiod.LINE_REQ_DIR_OUT)
+            self.backward.request(name, gpiod.LINE_REQ_DIR_OUT)
+        except Exception as e:
+            if not self.simulated: print(f"[GPIO HATA] {self.name}: {e}")
+            self.forward = MagicMock()
+            self.backward = MagicMock()
 
-        self.pwm_path = f"/sys/class/pwm/pwmchip0/pwm{pwm_no}"
         self._setup_pwm(pwm_no)
 
     def _setup_pwm(self, pwm_no):
-        if not self.is_simulated and not os.path.exists(self.pwm_path):
+        if not self.simulated and not os.path.exists(self.pwm_path):
             try:
-                with open("/sys/class/pwm/pwmchip0/export", "w") as f: f.write(str(pwm_no))
-            except: pass
+                with open("/sys/class/pwm/pwmchip0/export", "w") as f:
+                    f.write(str(pwm_no))
+            except Exception as e:
+                print(f"[PWM EXPORT HATA] {e}")
+
         self._write_pwm("enable", 0)
         self._write_pwm("period", self.period)
         self._write_pwm("duty_cycle", 0)
         self._write_pwm("enable", 1)
 
     def _write_pwm(self, file, value):
-        if not self.is_simulated:
-            try:
-                with open(f"{self.pwm_path}/{file}", "w") as f: f.write(str(value))
-            except: pass
+        if self.simulated: return
+        try:
+            with open(f"{self.pwm_path}/{file}", "w") as f:
+                f.write(str(value))
+        except Exception as e:
+            print(f"[PWM YAZMA HATA] {e}")
+
+    def set_speed(self, speed):
+        speed = max(min(speed, 100), -100)
+        # Deadzone: Motorların vınlamasını engeller
+        if 0 < abs(speed) < 15:
+            speed = 15 if speed > 0 else -15
+
+        if speed == self.last_speed: return
+        self.last_speed = speed
+
+        # Pinleri temizle ve yönü ata
+        self.forward.set_value(0)
+        self.backward.set_value(0)
+
+        if speed > 0:
+            self.forward.set_value(1)
+        elif speed < 0:
+            self.backward.set_value(1)
+
+        duty = int(self.period * abs(speed) / 100)
+        self._write_pwm("duty_cycle", duty)
+
+    def cleanup(self):
+        self._write_pwm("enable", 0)
+        try:
+            self.forward.release()
+            self.backward.release()
+        except: pass
 
 class SixWheelRobot:
-    def __init__(self, left_motor, right_motor):
-        self.left = left_motor
-        self.right = right_motor
-        self._current_task = None
-        self.MAX_SPEED = 100.0
-        self.MIN_SPEED = 0.0
+    def __init__(self, left, right, stop_pin=21):
+        self.left = left
+        self.right = right
+        self.task = None
+        self.emergency = False
 
-    async def _execute_movement(self, left_target, right_target, step=5):
-        """Hızlanma ve yavaşlamayı kademeli yapar ve terminale yazdırır."""
-        left_target = max(min(left_target, self.MAX_SPEED), -self.MAX_SPEED)
-        right_target = max(min(right_target, self.MAX_SPEED), -self.MAX_SPEED)
+        try:
+            self.stop_button = left.chip.get_line(stop_pin)
+            self.stop_button.request("E_STOP", gpiod.LINE_REQ_DIR_IN)
+        except:
+            self.stop_button = MagicMock()
 
-        while True:
-            changed = False
-            for m, target in [(self.left, left_target), (self.right, right_target)]:
-                if abs(m.active_speed - target) > 0.1:
-                    if m.active_speed < target:
-                        m.active_speed = min(m.active_speed + step, target)
-                    else:
-                        m.active_speed = max(m.active_speed - step, target)
-                    
-                    m.lines["forward"].set_value(1 if m.active_speed > 0 else 0)
-                    m.lines["backward"].set_value(1 if m.active_speed < 0 else 0)
-                    
-                    duty = int(m.period * (abs(m.active_speed) / 100))
-                    m._write_pwm("duty_cycle", duty)
-                    changed = True
-            
-            if changed:
-                # Terminalde hız değişimini takip etmek için eklenen kısım
-                print(f"   >> Hız Güncellendi: Sol %{self.left.active_speed:.1f} | Sağ %{self.right.active_speed:.1f}")
-            else:
-                break
-                
-            await asyncio.sleep(0.05) # Terminal takibi için ideal süre
-
-    async def _start_task(self, left_speed, right_speed):
-        if self._current_task and not self._current_task.done():
-            self._current_task.cancel()
-            try: await self._current_task
-            except asyncio.CancelledError: pass
+    async def hard_stop(self):
+        """Her şeyi anında kesen acil durum durdurması."""
+        if self.task and not self.task.done():
+            self.task.cancel()
         
-        self._current_task = asyncio.create_task(self._execute_movement(left_speed, right_speed))
-        await self._current_task
-
-    async def move_forward(self, speed):
-        print(f"\n[HAREKET] Hedef İleri %{speed}")
-        await self._start_task(speed, speed)
-
-    async def move_backward(self, speed):
-        print(f"\n[HAREKET] Hedef Geri %{speed}")
-        await self._start_task(-speed, -speed)
-
-    async def turn_left_tank(self, speed):
-        print(f"\n[DÖNÜŞ] Hedef Tank Sola %{speed}")
-        await self._start_task(-speed, speed)
-
-    async def turn_right_tank(self, speed):
-        print(f"\n[DÖNÜŞ] Hedef Tank Sağa %{speed}")
-        await self._start_task(speed, -speed)
+        self.left.active_speed = 0
+        self.right.active_speed = 0
+        self.left.set_speed(0)
+        self.right.set_speed(0)
+        print("\n[!!!] SERT DURUŞ YAPILDI")
 
     async def stop(self):
-        print("\n[SİSTEM] Durduruluyor...")
-        await self._start_task(0, 0)
+        """Yavaşlamadan anında duruş sağlar."""
+        print("\n[DUR] - Komut Geldi, Anında Frenleniyor...")
+        await self.hard_stop()
 
+    async def monitor_estop(self):
+        while True:
+            try:
+                if self.stop_button.get_value() == 1:
+                    if not self.emergency:
+                        self.emergency = True
+                        await self.hard_stop()
+                else:
+                    self.emergency = False
+            except: pass
+            await asyncio.sleep(0.01)
+
+    async def _move_task(self, left_target, right_target, step=4):
+        """Sadece hızlanırken rampa yapar."""
+        while not self.emergency:
+            changed = False
+            for motor, target in [(self.left, left_target), (self.right, right_target)]:
+                
+                # Mevcut hız ile hedef arasındaki fark
+                diff = target - motor.active_speed
+                
+                if abs(diff) > 0.1:
+                    # Hedefe doğru adım at (Rampa)
+                    if abs(diff) < step:
+                        motor.active_speed = target
+                    else:
+                        motor.active_speed += step if diff > 0 else -step
+                    
+                    motor.set_speed(motor.active_speed)
+                    changed = True
+
+            if changed:
+                print(f"  >> Sol %{self.left.active_speed:.1f} | Sağ %{self.right.active_speed:.1f}")
+            else:
+                break
+            await asyncio.sleep(0.05)
+
+    async def _start_action(self, left_speed, right_speed):
+        if self.task and not self.task.done():
+            self.task.cancel()
+            try: await self.task
+            except asyncio.CancelledError: pass
+
+        if not self.emergency:
+            self.task = asyncio.create_task(self._move_task(left_speed, right_speed))
+            await self.task
+
+    async def forward(self, speed):
+        print(f"\n[İLERİ] %{speed}")
+        await self.start_action(speed, speed)
+
+    async def backward(self, speed):
+        print(f"\n[GERİ] %{speed}")
+        await self.start_action(-speed, -speed)
+
+    async def left_turn(self, speed):
+        print(f"\n[SOL TANK] %{speed}")
+        await self.start_action(-speed, speed)
+
+    async def right_turn(self, speed):
+        print(f"\n[SAĞ TANK] %{speed}")
+        await self.start_action(speed, -speed)
+
+    # Alias (Kullanım kolaylığı için)
+    async def start_action(self, l, r):
+        await self._start_action(l, r)
+
+# --- ANA ÇALIŞTIRMA ---
 async def main():
-    sol = MotorDriver(forward_pin=17, backward_pin=18, pwm_no=0, name="Sol_Grup")
-    sag = MotorDriver(forward_pin=27, backward_pin=22, pwm_no=1, name="Sag_Grup")
-    ika = SixWheelRobot(left_motor=sol, right_motor=sag)
+    left = MotorDriver(17, 18, 0, "SOL")
+    right = MotorDriver(27, 22, 1, "SAG")
+    robot = SixWheelRobot(left, right)
+
+    # E-Stop dinleyicisini arka planda başlat
+    asyncio.create_task(robot.monitor_estop())
     
-    print("--- IKA_2026 Kontrol Sistemi Başlatıldı ---")
+    print("\n=== IKA 2026 TAM DENETİM TESTİ BAŞLIYOR ===")
 
     try:
-        # Örnek Senaryo
-        print("ileri test başlatıldı")
-        await ika.move_forward(50)
+        # 1. TEST: İLERİ GİDİŞ
+        print("\n[TEST 1] İleri Hareket Denetleniyor...")
+        await robot.forward(50)
+        await asyncio.sleep(1.5) # 1.5 saniye boyunca %50 hızda git
+        await robot.stop()       # Sert fren yap
         await asyncio.sleep(1)
 
-        print("tank dönüş sistemı başlatıldı")
-        await ika.turn_right_tank(40)
+        # 2. TEST: GERİ GİDİŞ
+        print("\n[TEST 2] Geri Hareket Denetleniyor...")
+        await robot.backward(40)
+        await asyncio.sleep(1.5)
+        await robot.stop()
         await asyncio.sleep(1)
 
-        print(" geri  test başlatıldı")
-        await ika.move_backward(50)
+        # 3. TEST: SAĞA TANK DÖNÜŞÜ
+        print("\n[TEST 3] Sağa Tank Dönüşü Denetleniyor...")
+        await robot.right_turn(30)
+        await asyncio.sleep(1.5)
+        await robot.stop()
         await asyncio.sleep(1)
 
+        # 4. TEST: SOLA TANK DÖNÜŞÜ
+        print("\n[TEST 4] Sola Tank Dönüşü Denetleniyor...")
+        await robot.left_turn(30)
+        await asyncio.sleep(1.5)
+        await robot.stop()
+        await asyncio.sleep(1)
+
+        # 5. TEST: ACİL DURDURMA (E-STOP) AKTİF Mİ?
+        print("\n[TEST 5] E-Stop Mekanizması Denetleniyor...")
+        print(">> Robot hızlanırken sanal butona basılacak...")
         
-        await ika.stop()
-    finally:
-        await ika.stop()
+        # Robotu tam gaza çıkarırken yarı yolda butona basılmış gibi yapalım
+        asyncio.create_task(robot.forward(100)) 
+        await asyncio.sleep(0.4) # Hızlanma devam ederken...
+        
+        # Simülasyonda butonu "1" yapıyoruz (Fiziksel butona basmakla aynı)
+        robot.stop_button.get_value.return_value = 1 
+        
+        await asyncio.sleep(1)
+        print("\n=== TÜM TESTLER TAMAMLANDI ===")
 
+    finally:
+        await robot.hard_stop()
+        left.cleanup()
+        right.cleanup()
+        
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("\nKullanıcı durdurdu.")
+        print("\n[PROGRAM KAPATILDI]")
+ 
        
 
 
