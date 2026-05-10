@@ -99,7 +99,7 @@ class SixWheelRobot:
         if self.task and not self.task.done():
             self.task.cancel()
         
-        self.left.active_speed = 0
+        self.left.active_speed = 0 
         self.right.active_speed = 0
         self.left.set_speed(0)
         self.right.set_speed(0)
@@ -140,7 +140,6 @@ class SixWheelRobot:
                     
                     motor.set_speed(motor.active_speed)
                     changed = True
-
             if changed:
                 print(f"  >> Sol %{self.left.active_speed:.1f} | Sağ %{self.right.active_speed:.1f}")
             else:
@@ -173,7 +172,6 @@ class SixWheelRobot:
         print(f"\n[SAĞ TANK] %{speed}")
         await self.start_action(speed, -speed)
 
-    # Alias (Kullanım kolaylığı için)
     async def start_action(self, l, r):
         await self._start_action(l, r)
 
@@ -196,6 +194,7 @@ async def main():
         await robot.stop()       # Sert fren yap
         await asyncio.sleep(1)
 
+        
         # 2. TEST: GERİ GİDİŞ
         print("\n[TEST 2] Geri Hareket Denetleniyor...")
         await robot.backward(40)
@@ -221,15 +220,13 @@ async def main():
         print("\n[TEST 5] E-Stop Mekanizması Denetleniyor...")
         print(">> Robot hızlanırken sanal butona basılacak...")
         
-        # Robotu tam gaza çıkarırken yarı yolda butona basılmış gibi yapalım
         asyncio.create_task(robot.forward(100)) 
-        await asyncio.sleep(0.4) # Hızlanma devam ederken...
-        
-        # Simülasyonda butonu "1" yapıyoruz (Fiziksel butona basmakla aynı)
+        await asyncio.sleep(0.4) 
         robot.stop_button.get_value.return_value = 1 
         
+
         await asyncio.sleep(1)
-        print("\n=== TÜM TESTLER TAMAMLANDI ===")
+        print("\n=== TEST TAMAMLANDI )")
 
     finally:
         await robot.hard_stop()
