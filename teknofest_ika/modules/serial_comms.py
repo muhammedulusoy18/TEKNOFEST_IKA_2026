@@ -4,6 +4,8 @@ import math
 from enum import Enum
 from unittest.mock import MagicMock
 
+DEBUG = False
+
 # --- DONANIM KONTROLÜ ---
 try:
     import smbus2
@@ -102,11 +104,14 @@ class IMU:
 # --- ASENKRON UART SINIFI ---
 class UART:
     def __init__(self, port="/dev/ttyS3", baud=115200):
+        self.ser = None
         try:
             self.ser = serial.Serial(port, baud, timeout=0, write_timeout=0)
-        except Exception as e: print(f"UART Hata: {e}")
+        except Exception as e:
+            print(f"UART Hata: {e}")
 
     def send(self, message):
+        if not self.ser: return
         try:
             packet = f"<{message}|{calculate_crc8(message):02X}>\n"
             if HARDWARE_MODE: self.ser.write(packet.encode())
@@ -114,7 +119,7 @@ class UART:
 
     async def receive(self):
         """Asenkron veri okuma: Veri yoksa beklemez, geçer."""
-        if HARDWARE_MODE and self.ser.in_waiting > 0:
+        if HARDWARE_MODE and self.ser and self.ser.in_waiting > 0:
             try:
                 line = self.ser.readline().decode(errors="ignore").strip()
                 if line.startswith("<") and "|" in line:
@@ -147,17 +152,32 @@ class HelmetSystem:
             # --- 1. SENSÖR VE HABERLEŞME ---
             roll, pitch = self.imu.update_angles(dt)
             cmd = await self.uart.receive()
-            roll=50.0
-            print(f"DEBUG: Durum={self.state.name} | Roll={roll}")
+
+            if DEBUG:
+                print(f"DEBUG: Durum={self.state.name} | Roll={roll:.1f} | Pitch={pitch:.1f}")
 
             # --- 2. DURUM MANTIĞI ---
             if cmd:
                 self.last_comm_time = time.perf_counter()
-                if cmd == "STOP": self.state = SystemState.STOPPED
+                if cmd == "STOP":
+                    self.state = SystemState.STOPPED
+                elif cmd == "RESUME" and self.state == SystemState.STOPPED:
+                    self.state = SystemState.RUNNING
 
-            # Güvenlik Sınırı (45 Derece)
+            # FAILSAFE'den çıkış: açı normale dönerse ve RESUME komutu gelirse
+            if self.state == SystemState.FAILSAFE:
+                if abs(roll) < 30 and abs(pitch) < 30 and cmd == "RESUME":
+                    self.state = SystemState.RUNNING
+
+            # Güvenlik Sınırı (45 Derece) - kademeli uyarı sistemi
             if abs(roll) > 45 or abs(pitch) > 45:
                 self.state = SystemState.FAILSAFE
+            elif abs(roll) > 35 or abs(pitch) > 35:
+                if self.state == SystemState.RUNNING:
+                    self.state = SystemState.WARNING
+            else:
+                if self.state == SystemState.WARNING:
+                    self.state = SystemState.RUNNING
 
             # İletişim Kaybı Kontrolü (1 saniye)
             if (time.perf_counter() - self.last_comm_time) > 1.0:

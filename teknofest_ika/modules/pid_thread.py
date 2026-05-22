@@ -5,13 +5,11 @@ from enum import Enum
 from unittest.mock import MagicMock
 
 # --- DONANIM SOYUTLAMA (MAGICMOCK) ---
-
 try:
     import gpiod
 except ImportError:
     gpiod = MagicMock()
 
-# PARAMETRELER
 SIMULATION_MODE   = True   
 LOOP_DT           = 0.02
 MAX_PWM           = 70.0
@@ -102,22 +100,43 @@ system_running = True
 
 # GÜVENLİK THREAD'İ
 def safety_thread():
-    global left_pwm, right_pwm
+    global left_pwm, right_pwm, state, system_running
     estop_printed = False
 
     try:
         while system_running:
-            hb = last_heartbeat
-            # E-Stop veya Zaman Aşımı Kontrolü
-            if emergency_stop.is_set() or (not SIMULATION_MODE and (time.time() - hb > HEARTBEAT_TIMEOUT)):
+            with lock:
+                hb = last_heartbeat
+
+            # E-Stop Kontrolü
+            if emergency_stop.is_set():
                 with lock:
                     left_pwm = right_pwm = 0.0
+                    state = State.ESTOP
                 if not estop_printed:
                     print("\n[SAFETY] GUVENLIK TETIKLENDI - Motorlar durduruldu.")
                     estop_printed = True
+
+            # Zaman Aşımı Kontrolü (simülasyonda da aktif)
+            elif (time.time() - hb) > HEARTBEAT_TIMEOUT:
+                with lock:
+                    left_pwm = right_pwm = 0.0
+                    state = State.TIMEOUT
+                if not estop_printed:
+                    print("\n[SAFETY] HEARTBEAT ZAMAN ASIMI - Motorlar durduruldu.")
+                    estop_printed = True
+
+            # Laser Aktif Kontrolü
+            elif laser_active.is_set():
+                with lock:
+                    state = State.LASER
+                estop_printed = False
+
             else:
                 estop_printed = False
+
             time.sleep(0.05)
+
     except Exception as e:
         print(f"[ERROR] Safety Thread hatasi: {e}")
         emergency_stop.set()
@@ -126,7 +145,7 @@ def safety_thread():
 def main():
     global left_speed, right_speed, left_pwm, right_pwm
     global last_heartbeat, state, prev_state
-    global sp_l, sp_r
+    global sp_l, sp_r, system_running
 
     # Mock Sürücüler
     mock_driver_l = MagicMock(name="Sol_Driver")
@@ -144,26 +163,22 @@ def main():
         while system_running:
             t0 = time.time()
 
-            # Durum Belirleme
-            if emergency_stop.is_set():
-                state = State.ESTOP
-            elif laser_active.is_set():
-                state = State.LASER
-            else:
-                state = State.RUN
+            # Güvenli durum okuma
+            with lock:
+                current_state = state
 
-            if state != prev_state:
-                print(f"\n[SISTEM] Yeni Durum: {state.name}")
-                if state == State.RUN:
+            if current_state != prev_state:
+                print(f"\n[SISTEM] Yeni Durum: {current_state.name}")
+                if current_state == State.RUN:
                     pid_l.reset()
                     pid_r.reset()
-                prev_state = state
+                prev_state = current_state
 
             with lock:
                 lp, rp = left_pwm, right_pwm
 
             # Fizik Simülasyonu (Hız değişimi)
-            if state != State.RUN:
+            if current_state != State.RUN:
                 left_speed *= 0.8
                 right_speed *= 0.8
             else:
@@ -177,8 +192,11 @@ def main():
             filt_r = lowpass(filt_r, raw_r, MEAS_ALPHA)
 
             # Kontrol Hesaplamaları
-            if state == State.RUN:
-                last_heartbeat = time.time()
+            if current_state == State.RUN:
+                # Heartbeat güncelleme
+                with lock:
+                    last_heartbeat = time.time()
+
                 ff_l, ff_r = motor_model_inv(sp_l), motor_model_inv(sp_r)
                 
                 u_l = pid_l.compute(sp_l, filt_l, LOOP_DT, MIN_PWM, MAX_PWM, ff_l)
@@ -186,7 +204,14 @@ def main():
                 
                 new_lp = slew_limit(lp, u_l, PWM_SLEW_RATE, LOOP_DT)
                 new_rp = slew_limit(rp, u_r, PWM_SLEW_RATE, LOOP_DT)
+
+            elif current_state == State.LASER:
+                # Laser aktifken motorlar yavaşlar ama durmaz
+                new_lp = slew_limit(lp, sp_l * 0.3, PWM_SLEW_RATE, LOOP_DT)
+                new_rp = slew_limit(rp, sp_r * 0.3, PWM_SLEW_RATE, LOOP_DT)
+
             else:
+                # ESTOP veya TIMEOUT: motorlar sıfıra iner
                 new_lp = slew_limit(lp, 0.0, PWM_SLEW_RATE, LOOP_DT)
                 new_rp = slew_limit(rp, 0.0, PWM_SLEW_RATE, LOOP_DT)
 
@@ -198,8 +223,7 @@ def main():
 
             # Ekrana Yazdırma
             if time.time() - last_print_time > 0.5:
-                if state == State.RUN:
-                    print(f"L_HIZ:{filt_l:5.1f} | L_PWM:{left_pwm:4.1f} || R_HIZ:{filt_r:5.1f} | R_PWM:{right_pwm:4.1f} | {state.name}")
+                print(f"L_HIZ:{filt_l:5.1f} | L_PWM:{left_pwm:4.1f} || R_HIZ:{filt_r:5.1f} | R_PWM:{right_pwm:4.1f} | {current_state.name}")
                 last_print_time = time.time()
 
             # Zamanlama Ayarı
@@ -209,6 +233,7 @@ def main():
     except KeyboardInterrupt:
         print("\n[INFO] Kapatiliyor...")
         emergency_stop.set()
+        system_running = False
         time.sleep(0.5)
         print("[OK] Sistem guvenli duruma alindi.")
 
@@ -216,6 +241,4 @@ if __name__ == "__main__":
     # Thread'i başlatalım
     t_safety = threading.Thread(target=safety_thread, daemon=True)
     t_safety.start()
-    
-    # Ana fonksiyonu çağıralım
     main()
