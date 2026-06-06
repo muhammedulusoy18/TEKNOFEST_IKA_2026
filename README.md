@@ -306,8 +306,8 @@ TEKNOFEST_IKA_2026/
 
 | İsim | Rol |
 |------|-----|
+| 👑 **Muhammed Ulusoy** | **Yazılım Kaptanı** |
 | **Yusuf Tufan** | Yazılım Geliştirici |
-| **Muhammed Ulusoy** | Yazılım Kaptanı |
 | **Zeynep** | Yazılım Geliştirici |
 | **Hatice** | Yazılım Geliştirici |
 
