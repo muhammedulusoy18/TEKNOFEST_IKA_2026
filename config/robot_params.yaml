@@ -1,0 +1,103 @@
+# IKA 2026 — config/robot_params.yaml
+# Khadas VIM3 donanım parametreleri ve yazılım ayarları
+# Bu dosya ROS 2 launch dosyasından parametre olarak yüklenebilir.
+
+# ============================================================
+# MOTOR SÜRÜCÜSİ
+# ============================================================
+motor:
+  # Sol Motor — VIM3 GPIO kernel numaraları
+  left_forward_gpio:  228    # GPIOH_6  → Header Pin 35
+  left_backward_gpio: 229    # GPIOH_7  → Header Pin 37
+  left_pwm_chip:      0      # /sys/class/pwm/pwmchip0 (overlay: pwm_ao_a)
+
+  # Sağ Motor
+  right_forward_gpio: 501    # GPIOAO_5 → Header Pin 15
+  right_backward_gpio: 502   # GPIOAO_6 → Header Pin 16
+  right_pwm_chip:     4      # /sys/class/pwm/pwmchip4 (overlay: pwm_f)
+
+  pwm_period_ns:      50000  # 50µs → 20kHz
+  gpio_chip:          "gpiochip1"  # VIM3 GPIO chip adı
+
+# ============================================================
+# PID KONTROL
+# ============================================================
+pid:
+  kp:         1.2
+  ki:         0.4
+  kd:         0.15
+  beta:       0.7    # Set-point ağırlığı
+  kaw:        0.5    # Anti-windup kazancı
+  d_alpha:    0.7    # Türev filtresi
+  max_pwm:    70.0   # Maksimum PWM değeri (güvenlik sınırı)
+  loop_hz:    50     # PID döngü frekansı
+
+# ============================================================
+# GÜVENLİK (FAILSAFE)
+# ============================================================
+failsafe:
+  roll_warn_deg:   35.0
+  roll_stop_deg:   45.0
+  pitch_warn_deg:  35.0
+  pitch_stop_deg:  45.0
+  comm_timeout_s:  2.0
+  battery_min_pct: 10
+  cpu_warn_pct:    90
+  temp_warn_c:     75.0
+  temp_stop_c:     90.0
+  heartbeat_timeout_s: 1.0
+
+# ============================================================
+# KAMERA
+# ============================================================
+camera:
+  source:    0        # USB kamera → /dev/video0
+  width:     640
+  height:    480
+  fps:       30
+  fourcc:    "MJPG"  # USB bant genişliği için kritik
+
+# ============================================================
+# IMU (MPU6050)
+# ============================================================
+imu:
+  i2c_bus:   3        # VIM3 i2c3 → /dev/i2c-3 (overlay: i2c3)
+  address:   0x68     # MPU6050 varsayılan I2C adresi
+  alpha:     0.98     # Complementary filter ağırlığı
+  sample_hz: 50
+
+# ============================================================
+# UART (Harici MCU / Kask Modülü)
+# ============================================================
+uart:
+  port:      "/dev/ttyS3"   # VIM3 uart3 → /dev/ttyS3 (overlay: uart3)
+  baudrate:  115200
+
+# ============================================================
+# ALGILAMA
+# ============================================================
+perception:
+  target_number:      "8"
+  ocr_every_n_frames: 10
+  cone_min_area:      800     # Koni kontur minimum alanı (piksel^2)
+  moving_min_area:    3000    # Hareketli engel minimum alanı
+  lane_min_pixels:    500     # Şerit centroid için minimum piksel sayısı
+  lane_steer_gain:    0.15    # P kazancı (piksel hata → steer)
+  lane_lost_max:      10      # Şerit kayıp toleransı (kare)
+
+# ============================================================
+# GCS İLETİŞİM
+# ============================================================
+gcs:
+  telemetry_host:  "0.0.0.0"
+  telemetry_port:  9001       # UDP — Yer İstasyonu alır
+  command_port:    9000       # TCP — Yer İstasyonu gönderir
+  telemetry_hz:    10         # Telemetri gönderim sıklığı
+
+# ============================================================
+# VIM3 SİSTEM İZLEME
+# ============================================================
+system_monitor:
+  report_hz:  2    # CPU/RAM/Disk/Sıcaklık raporlama sıklığı
+  # VIM3 sıcaklık dosyası: /sys/class/thermal/thermal_zone0/temp
+  temp_path:  "/sys/class/thermal/thermal_zone0/temp"

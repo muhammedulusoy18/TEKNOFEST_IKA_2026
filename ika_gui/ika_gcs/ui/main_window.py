@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
-from comm.tcp_client import TcpClient
-from workers.telemetry_worker import TelemetryWorker
+from workers.gcs_ros_node import GCSROSWorker
 
 from PyQt5.QtWidgets import (
     QMainWindow, QWidget,
@@ -97,20 +96,17 @@ class MainWindow(QMainWindow):
 
         self.switch_page(0)
 
-        # ── TELEMETRY WORKER ─────────────────────────
-        self.telemetry_worker = TelemetryWorker(bind_ip="0.0.0.0", port=9001)
-        self.telemetry_worker.telemetry.connect(self.on_telemetry)
-        self.telemetry_worker.link.connect(self.on_link)
-        self.telemetry_worker.start()
+        # ── ROS 2 WORKER ─────────────────────────────
+        self.ros_worker = GCSROSWorker()
+        self.ros_worker.sig_telemetry.connect(self.on_telemetry)
+        self.ros_worker.sig_image.connect(self.cam_main.cam1.set_frame)
+        self.ros_worker.sig_status.connect(self.on_ros_status)
+        
+        self.left_panel.btn_connect.clicked.connect(self.ros_connect)
+        self.left_panel.btn_disconnect.clicked.connect(self.ros_disconnect)
 
-        # ── TCP ──────────────────────────────────────
-        self.tcp = None
-
-        self.left_panel.btn_connect.clicked.connect(self.tcp_connect)
-        self.left_panel.btn_disconnect.clicked.connect(self.tcp_disconnect)
-
-        self.mission_page.left_panel.btn_connect.clicked.connect(self.tcp_connect_mission)
-        self.mission_page.left_panel.btn_disconnect.clicked.connect(self.tcp_disconnect)
+        self.mission_page.left_panel.btn_connect.clicked.connect(self.ros_connect)
+        self.mission_page.left_panel.btn_disconnect.clicked.connect(self.ros_disconnect)
 
         # ── Buton log bağlantıları ────────────────────
 
@@ -121,6 +117,7 @@ class MainWindow(QMainWindow):
         self.manual_drive.sig_speed_changed.connect(
             lambda v: self.left_panel.log_panel.log_speed(v)
         )
+        self.manual_drive.sig_joystick_move.connect(self._send_joystick_cmd)
 
         # Control — Otonom: sayfa geçişi + log + toast
         self.autonomy.sig_autonomy_toggled.connect(self._on_autonomy_control)
@@ -150,16 +147,23 @@ class MainWindow(QMainWindow):
         # Log panellerini birbirine bağla
         self.left_panel.log_panel.link_to(self.mission_page.left_panel.log_panel)
 
+    # ── Joystick ROS Handler ──────────────────────────
+
+    def _send_joystick_cmd(self, x, y):
+        # y pozitif = ileri, x pozitif = sağ (manual_drive_panel'de speed çarpıldı)
+        self.ros_worker.send_move(y, -x) # Twist: linear_x (ileri y), angular_z (sol pozitif -x)
+
     # ── Otonom geçiş handler'ları ─────────────────────
 
     def _on_autonomy_control(self, active: bool):
         """Control sayfasındaki otonom butonu — onay diyaloğundan sonra gelir."""
+        mode = "AUTONOMOUS" if active else "MANUAL"
+        self.ros_worker.send_drive_mode(mode)
         if active:
             self.switch_page(1)
             self.toast.show_message("✓ Otonom mod aktif — Mission ekranına geçildi")
             self.left_panel.log_mode_change("OTONOM AKTİF")
             self.mission_page.left_panel.log_mode_change("OTONOM AKTİF")
-            # Mission panelini senkronize et (diyalogsuz)
             self.mission_page.autonomy.set_active(True)
         else:
             self.toast.show_message("Otonom mod pasif")
@@ -168,12 +172,13 @@ class MainWindow(QMainWindow):
 
     def _on_autonomy_mission(self, active: bool):
         """Mission sayfasındaki otonom butonu."""
+        mode = "AUTONOMOUS" if active else "MANUAL"
+        self.ros_worker.send_drive_mode(mode)
         if not active:
             self.switch_page(0)
             self.toast.show_message("Otonom mod pasif — Kontrol ekranına geçildi")
             self.mission_page.left_panel.log_mode_change("OTONOM PASİF")
             self.left_panel.log_mode_change("OTONOM PASİF")
-            # Control panelini senkronize et
             self.autonomy.set_active(False)
         else:
             self.toast.show_message("✓ Otonom mod aktif")
@@ -224,52 +229,25 @@ class MainWindow(QMainWindow):
                 pitch=t.get("pitch", 0.0)
             )
 
-    def on_link(self, status: str):
-        pass
+    def ros_connect(self):
+        if not self.ros_worker.isRunning():
+            self.ros_worker.start()
 
-    def tcp_connect(self):
-        host = self.left_panel.host_input.text().strip() or "127.0.0.1"
-        port = int(self.left_panel.port_input.text().strip() or "9000")
-        self._connect_tcp(host, port)
-
-    def tcp_connect_mission(self):
-        host = self.mission_page.left_panel.host_input.text().strip() or "127.0.0.1"
-        port = int(self.mission_page.left_panel.port_input.text().strip() or "9000")
-        self._connect_tcp(host, port)
-
-    def _connect_tcp(self, host, port):
-        if self.tcp:
-            self.tcp.disconnect_from_server()
-        self.tcp = TcpClient(host=host, port=port)
-        self.tcp.status.connect(self.on_tcp_status)
-        self.tcp.received.connect(self.on_tcp_received)
-        self.tcp.ack.connect(self.on_tcp_ack)
-        self.tcp.connect_to_server()
-
-    def tcp_disconnect(self):
-        if self.tcp:
-            self.tcp.disconnect_from_server()
+    def ros_disconnect(self):
+        if self.ros_worker.isRunning():
+            self.ros_worker.stop()
+            self.ros_worker.wait()
         self.left_panel.update_connection(False)
         self.mission_page.left_panel.update_connection(False)
 
-    def on_tcp_status(self, msg):
-        self.toast.show_message(f"TCP: {msg}")
-        msg_lower = str(msg).lower()
-        connected    = any(x in msg_lower for x in ["connected", "bağlandı", "connected to"])
-        disconnected = any(x in msg_lower for x in ["disconnect", "koptu", "kesildi", "failed", "error"])
-
-        if connected and not disconnected:
-            self.left_panel.update_connection(True, ping=24)
-            self.mission_page.left_panel.update_connection(True, ping=24)
-        if disconnected:
+    def on_ros_status(self, msg):
+        self.toast.show_message(f"ROS 2: {msg}")
+        if "CONNECTED" in msg:
+            self.left_panel.update_connection(True, ping=1)
+            self.mission_page.left_panel.update_connection(True, ping=1)
+        elif "DISCONNECTED" in msg or "ERROR" in msg:
             self.left_panel.update_connection(False)
             self.mission_page.left_panel.update_connection(False)
-
-    def on_tcp_received(self, obj: dict):
-        print("RX:", obj)
-
-    def on_tcp_ack(self, obj: dict):
-        print("ACK:", obj)
 
     def change_theme(self):
         pass
@@ -278,4 +256,5 @@ class MainWindow(QMainWindow):
         self.toast.show_message("⚠ ACİL STOP TETİKLENDİ!")
         self.left_panel.log_panel.add_log("ACİL STOP TETİKLENDİ!", "ERROR")
         self.mission_page.left_panel.log_panel.add_log("ACİL STOP TETİKLENDİ!", "ERROR")
-        print("ACİL STOP BASILDI!")
+        self.ros_worker.send_estop()
+        print("ACİL STOP BASILDI (ROS Twist -> 0)")

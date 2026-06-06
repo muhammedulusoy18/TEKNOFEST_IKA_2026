@@ -3,11 +3,12 @@ from PyQt5.QtWidgets import QApplication
 from ui.theme.theme_manager import ThemeManager
 from ui.main_window import MainWindow
 from splash_screen import SplashScreen
+from app.constants import APP_NAME, WINDOW_TITLE
 
 
 def main():
     app = QApplication(sys.argv)
-    app.setApplicationName("IKA GCS")
+    app.setApplicationName(APP_NAME)
 
     ThemeManager.apply(app, mode="dark")
 

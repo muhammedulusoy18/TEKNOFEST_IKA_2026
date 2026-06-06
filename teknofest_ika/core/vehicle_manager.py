@@ -1,118 +1,197 @@
+"""
+vehicle_manager.py — IKA 2026 Araç Yönetim Merkezi
+=====================================================
+Tüm alt sistemleri koordine eden ana orkestratör.
+- Kamera → Algılama → Karar → Motor zinciri
+- FailsafeGuard entegrasyonu (IMU bazlı acil durdurma)
+- Manuel override ile otonom mod arasında geçiş
+- Khadas VIM3 için optimize edilmiş thread mimarisi
+"""
+
 import cv2
 import threading
 import teknofest_ika.modules.pid_thread as pid_ctrl
 from teknofest_ika.modules.perception import PerceptionUnit
 from teknofest_ika.utils.camera_handler import CameraHandler
+from teknofest_ika.core.failsafe import FailsafeGuard
 
 
 class VehicleManager:
+    """
+    Ana araç kontrol sınıfı.
+
+    Durum Makinesi:
+        DRIVING         → Otonom sürüş (şerit takibi + engel kaçınma)
+        AIMING          → Hedefe nişan alma
+        SHOOTING        → Lazer atışı
+        SLIDING_OBSTACLE→ Hareketli engel kaçınma
+    """
+
     def __init__(self):
+        print("[VehicleManager] Alt sistemler başlatılıyor...")
+
+        # Algılama ve Kamera
         self.perception = PerceptionUnit()
-        self.camera = CameraHandler(camera_source=0)
-        self.is_running = True
-        self.system_state = "DRIVING"
+        self.camera     = CameraHandler(camera_source=0)
+
+        # Güvenlik Kalkanı
+        self.guard = FailsafeGuard()
+        self.guard.on_state_change(self._on_failsafe_change)
+
+        # Durum
+        self.is_running      = True
+        self.system_state    = "DRIVING"
         self.manual_override = False
 
-        print("[SİSTEM] Güvenlik kalkanları ve PID motor denetleyicisi aktif ediliyor...")
-        threading.Thread(target=pid_ctrl.safety_thread, daemon=True).start()
-        threading.Thread(target=pid_ctrl.main, daemon=True).start()
+        # PID + Güvenlik thread'leri başlat
+        print("[VehicleManager] PID motor denetleyicisi ve güvenlik kalkanı aktif ediliyor...")
+        threading.Thread(target=pid_ctrl.safety_thread, daemon=True, name="safety_thread").start()
+        threading.Thread(target=pid_ctrl.main,          daemon=True, name="pid_thread").start()
+
+        print("[VehicleManager] ✅ Tüm sistemler hazır.")
 
     def run(self):
-        print("==================================================")
-        print("  TEKNOFEST 2026 IKA - ARAÇ YÖNETİM SİSTEMİ")
-        print("==================================================")
-        print("KOMUTLAR: W(İleri) | X(Geri) | A(Sol) | D(Sağ) | Space(Otonomi)")
+        print("=" * 54)
+        print("  TEKNOFEST 2026 IKA — ARAÇ YÖNETİM SİSTEMİ")
+        print("=" * 54)
+        print("KOMUTLAR: W(İleri) | X(Geri) | A(Sol) | D(Sağ)")
+        print("          Space(Otonomi) | 8(AIMING) | 9(DRIVING) | Q(Çıkış)")
 
         try:
             while self.is_running:
                 frame = self.camera.get_frame()
-                if frame is None: continue
+                if frame is None:
+                    continue
 
-                # 1. Otonomi Kararı (Arka planda hep çalışır)
-                decision, output_frame, new_state = self.perception.process_frame(frame, self.system_state)
+                # 1. Otonom Algılama
+                decision, output_frame, new_state = self.perception.process_frame(
+                    frame, self.system_state
+                )
                 self.system_state = new_state
 
-                # 2. Klavye Okuma
+                # 2. Failsafe Kontrolü
+                if not self.guard.is_safe():
+                    # Acil durumda motoru durdur, otonom moda geçme
+                    reason = self.guard.get_reason()
+                    pid_ctrl.set_setpoints(0.0, 0.0)
+                    cv2.putText(output_frame,
+                                f"FAILSAFE: {reason.upper()}",
+                                (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+                    cv2.imshow("TEKNOFEST IKA 2026", output_frame)
+                    if cv2.waitKey(1) & 0xFF == ord('q'):
+                        self.is_running = False
+                    continue
+
+                # 3. Klavye Girişi
                 key = cv2.waitKey(1) & 0xFF
 
                 if key != 255:
                     self._handle_keyboard(key)
                 else:
-                    # EĞER TUŞA BASILMIYORSA VE MANUEL MODDAYSAK FREN YAP!
+                    # Tuşa basılmıyorsa ve manuel moddaysa fren
                     if self.manual_override:
-                        pid_ctrl.sp_l, pid_ctrl.sp_r = 0.0, 0.0
-                # Tuşa basıldıysa işleme al
+                        pid_ctrl.set_setpoints(0.0, 0.0)
 
-                # 3. Motor Kontrolü
-                # Eğer manuel override varsa otonomi komutlarını yoksay
+                # 4. Motor Kontrolü
                 if not self.manual_override:
                     self._apply_kinematics(decision)
 
-                cv2.imshow("TEKNOFEST IKA - Muhammed Ulusoy", output_frame)
+                # 5. Heartbeat güncelle (timeout koruması)
+                self.guard.heartbeat()
+                pid_ctrl.update_heartbeat()
+
+                cv2.imshow("TEKNOFEST IKA 2026", output_frame)
 
         except Exception as e:
-            print(f"[HATA] Beklenmedik hata: {e}")
+            import traceback
+            print(f"[HATA] VehicleManager çalışma zamanı hatası: {e}")
+            traceback.print_exc()
         finally:
             self._cleanup()
 
-    def _handle_keyboard(self, key):
-        """Doğrudan 119 gibi ASCII kodları üzerinden kontrol."""
+    def _handle_keyboard(self, key: int):
+        """ASCII tuş kodlarına göre manuel kontrol."""
 
-        # SÜREKLİ TAKİP İÇİN (Çalıştığını buradan teyit et kanka)
-        if key != 255:
-            print(f">>> TUS ALGILANDI: {key}")
-
-        # W - İLERİ (119: w, 87: W)
-        if key == 119 or key == 87:
+        # W / w — İleri (119/87)
+        if key in (119, 87):
             self.manual_override = True
-            pid_ctrl.sp_l, pid_ctrl.sp_r = 50.0, 50.0
-            print(">>> MANUEL KOMUT: İLERİ GİDİYOR")
+            pid_ctrl.set_setpoints(50.0, 50.0)
+            print(">>> MANUEL: İLERİ")
 
-        # X - GERİ (120: x, 88: X)
-        elif key == 120 or key == 88:
+        # X / x — Geri (120/88)
+        elif key in (120, 88):
             self.manual_override = True
-            pid_ctrl.sp_l, pid_ctrl.sp_r = -50.0, -50.0
-            print(">>> MANUEL KOMUT: GERİ GİDİYOR")
+            pid_ctrl.set_setpoints(-50.0, -50.0)
+            print(">>> MANUEL: GERİ")
 
-        # A - SOL TANK (97: a, 65: A)
-        elif key == 97 or key == 65:
+        # A / a — Sol Tank Dönüşü (97/65)
+        elif key in (97, 65):
             self.manual_override = True
-            pid_ctrl.sp_l, pid_ctrl.sp_r = -50.0, 50.0
-            print(">>> MANUEL KOMUT: SOLA DÖNÜŞ")
+            pid_ctrl.set_setpoints(-50.0, 50.0)
+            print(">>> MANUEL: SOL DÖNÜŞ")
 
-        # D - SAĞ TANK (100: d, 68: D)
-        elif key == 100 or key == 68:
+        # D / d — Sağ Tank Dönüşü (100/68)
+        elif key in (100, 68):
             self.manual_override = True
-            pid_ctrl.sp_l, pid_ctrl.sp_r = 50.0, -50.0
-            print(">>> MANUEL KOMUT: SAĞA DÖNÜŞ")
+            pid_ctrl.set_setpoints(50.0, -50.0)
+            print(">>> MANUEL: SAĞ DÖNÜŞ")
 
-        # SPACE - OTONOMİYE DÖN (32: Space)
+        # Space — Otonomi (32)
         elif key == 32:
             self.manual_override = False
-            pid_ctrl.sp_l, pid_ctrl.sp_r = 0.0, 0.0
-            print(">>> MOD: OTONOMİYE DEVREDİLDİ")
+            pid_ctrl.set_setpoints(0.0, 0.0)
+            print(">>> MOD: OTONOMİ")
 
-        # MOD DEĞİŞTİRME (56: 8, 57: 9)
-        elif key == 56:  # 8
+        # 8 — Nişan Alma modu
+        elif key == 56:
             self.system_state = "AIMING"
-            print(">>> DURUM: NISAN ALMA")
-        elif key == 57:  # 9
-            self.system_state = "DRIVING"
-            print(">>> DURUM: SURUS")
+            print(">>> DURUM: NİŞAN ALMA")
 
-        # Q - ÇIKIŞ (113: q, 81: Q)
-        elif key == 113 or key == 81:
+        # 9 — Sürüş moduna dön
+        elif key == 57:
+            self.system_state = "DRIVING"
+            print(">>> DURUM: SÜRÜŞ")
+
+        # R — Failsafe sıfırla
+        elif key in (114, 82):
+            if self.guard.reset():
+                print(">>> FAILSAFE: SIFIRLANDI")
+            else:
+                print(">>> FAILSAFE: Sıfırlama reddedildi (koşullar sağlanmadı)")
+
+        # Q / q — Çıkış (113/81)
+        elif key in (113, 81):
             self.is_running = False
 
-    def _apply_kinematics(self, cmd_dict):
-        # Otonomi komutlarını motor setpointlerine çevirir
-        steer = cmd_dict.get("steer", 0)
+    def _apply_kinematics(self, cmd_dict: dict):
+        """
+        Otonom karar komutunu sol/sağ motor setpointlerine çevirir.
+        Diferansiyel sürüş kinematik dönüşümü.
+        """
+        steer    = cmd_dict.get("steer", 0)
         throttle = cmd_dict.get("throttle", 0)
-        pid_ctrl.sp_l = max(-70.0, min(70.0, throttle + steer))
-        pid_ctrl.sp_r = max(-70.0, min(70.0, throttle - steer))
+        sp_l = float(max(-70.0, min(70.0, throttle + steer)))
+        sp_r = float(max(-70.0, min(70.0, throttle - steer)))
+        pid_ctrl.set_setpoints(sp_l, sp_r)
+
+    def _on_failsafe_change(self, state, reason):
+        """FailsafeGuard durum değişimi geri çağrısı."""
+        from teknofest_ika.core.failsafe import FailsafeState
+        if state in (FailsafeState.FAILSAFE, FailsafeState.LOCKED):
+            # Acil durdurma
+            pid_ctrl.emergency_stop.set()
+            pid_ctrl.set_setpoints(0.0, 0.0)
+            print(f"[VehicleManager] ⛔ FAILSAFE TETİKLENDİ: {reason.value}")
+        elif state == FailsafeState.NORMAL:
+            # Güvenli duruma döndü — E-Stop event'ini temizle
+            pid_ctrl.emergency_stop.clear()
+            print("[VehicleManager] ✅ Failsafe kaldırıldı.")
 
     def _cleanup(self):
-        print("[SİSTEM] Kapatılıyor...")
+        print("[VehicleManager] Sistem kapatılıyor...")
         pid_ctrl.emergency_stop.set()
+        pid_ctrl.set_setpoints(0.0, 0.0)
+        pid_ctrl.system_running = False
         self.camera.stop()
         cv2.destroyAllWindows()
+        print("[VehicleManager] ✅ Tüm kaynaklar serbest bırakıldı.")

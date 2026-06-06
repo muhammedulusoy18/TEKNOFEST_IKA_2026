@@ -12,8 +12,10 @@ setup(
         ('share/ament_index/resource_index/packages', ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
         # Launch ve Config klasörlerini sisteme dahil eder
-        (os.path.join('share', package_name, 'launch'), glob('launch/*.py')),
+        (os.path.join('share', package_name, 'launch'), glob('teknofest_ika/launch/*.py')),
         (os.path.join('share', package_name, 'config'), glob('config/*.yaml')),
+        # ros2 run için node script'lerini lib/<pkg>/ altına kopyala
+        (os.path.join('lib', package_name), glob('teknofest_ika/nodes/*_node.py')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,

@@ -41,7 +41,9 @@ class SystemState(Enum):
 
 # --- ASENKRON IMU SINIFI ---
 class IMU:
-    def __init__(self, bus_id=1, address=0x68, alpha=0.98):
+    # VIM3 I2C: bus_id=3 önerilir (overlays=i2c3 ile aktive edilir, /dev/i2c-3)
+    # MPU6050 I2C adresi: 0x68
+    def __init__(self, bus_id=3, address=0x68, alpha=0.98):
         self.address = address
         self.alpha = alpha
         self.roll = 0.0
@@ -101,8 +103,13 @@ class IMU:
         self.pitch = self.alpha * (self.pitch + gy * dt) + (1 - self.alpha) * accel_pitch
         return self.roll, self.pitch
 
+    def get_angles(self, dt):
+        """update_angles için kısmi alias — sensor_node.py uyumluluğu için."""
+        return self.update_angles(dt)
+
 # --- ASENKRON UART SINIFI ---
 class UART:
+    # VIM3 UART: /dev/ttyS3 (overlays=uart3 ile aktive edilir)
     def __init__(self, port="/dev/ttyS3", baud=115200):
         self.ser = None
         try:
@@ -129,6 +136,14 @@ class UART:
                         return msg
             except: pass
         return None
+
+    def close(self):
+        """Seri portu güvenle kapat."""
+        try:
+            if self.ser:
+                self.ser.close()
+        except Exception:
+            pass
     
 class HelmetSystem:
     def __init__(self):

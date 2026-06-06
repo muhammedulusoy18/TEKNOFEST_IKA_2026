@@ -9,6 +9,7 @@ class ManualDrivePanel(QFrame):
     # fix #2: log sinyalleri — MainWindow bunları log_panel'e bağlar
     sig_mode_changed = pyqtSignal(str)   # "AKTİF" / "PASİF"
     sig_speed_changed = pyqtSignal(int)  # 0-100
+    sig_joystick_move = pyqtSignal(float, float) # (x, y)
  
     def __init__(self):
         super().__init__()
@@ -91,8 +92,7 @@ class ManualDrivePanel(QFrame):
         if not self.manual_enabled:
             return
         speed = self.get_speed()
-        print("Throttle:", y * speed)
-        print("Steering:", x * speed)
+        self.sig_joystick_move.emit(x * speed, y * speed)
  
     def _styles(self):
         return """

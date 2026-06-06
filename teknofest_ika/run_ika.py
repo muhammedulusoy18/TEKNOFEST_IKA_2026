@@ -1,6 +1,6 @@
 import sys
 import os
-import time
+import traceback
 from unittest.mock import MagicMock
 
 # 1. Yol Tanımlamaları: Python'ın yan klasörleri (core, modules) görmesini sağlar
@@ -21,33 +21,29 @@ except ImportError:
 # Not: Bunlar sys.path ayarından SONRA gelmelidir
 try:
     from teknofest_ika.core.vehicle_manager import VehicleManager
-    from modules.perception import PerceptionUnit
 except ImportError as e:
     print(f"[HATA] Modüller içe aktarılamadı: {e}")
+    print("[İPUCU] Paketi ROS 2 workspace içinde 'colcon build' ile derleyin veya")
+    print("        'python -m teknofest_ika.run_ika' şeklinde çalıştırın.")
+    sys.exit(1)
 
 def main():
     print("--- TEKNOFEST IKA 2026 SİSTEMİ BAŞLATILIYOR ---")
     
     try:
-        # Araç yönetim merkezini kur
+        # Araç yönetim merkezini kur (PerceptionUnit + CameraHandler dahili olarak oluşturulur)
         arac = VehicleManager()
         
         print("[BİLGİ] Araç döngüsü başlatılıyor...")
         
-        # 4. Aracı Çalıştır
-        # Bu fonksiyonun içinde kendi döngüsü yoksa diye altına bir while ekliyoruz
-        arac.run() 
+        # 4. Aracı Çalıştır (kendi döngüsü var, bloklar)
+        arac.run()
 
-        print("[BİLGİ] Sistem ayakta, durdurmak için Ctrl+C basın.")
-        
-        # Sistemin kapanmasını engelleyen ana döngü
-        while True:
-            time.sleep(1)
-            
     except KeyboardInterrupt:
         print("\n[BİLGİ] Kullanıcı komutuyla sistem kapatılıyor...")
     except Exception as e:
         print(f"[KRİTİK HATA] Çalışma zamanı hatası: {e}")
+        traceback.print_exc()
 
 if __name__ == '__main__':
     main()

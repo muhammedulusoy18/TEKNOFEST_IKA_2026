@@ -39,18 +39,18 @@ class MotorNode(Node):
         hedef_sol = throttle + steer
         hedef_sag = throttle - steer
 
-        # PID katmanındaki değişkenleri doğrudan güncelle
-        # Maksimum hızı (PWM) 70.0 ile sınırlandırıyoruz (Güvenlik gereği)
-        pid_ctrl.sp_l = max(-70.0, min(70.0, hedef_sol))
-        pid_ctrl.sp_r = max(-70.0, min(70.0, hedef_sag))
+        # PID katmanına thread-safe yaz
+        pid_ctrl.set_setpoints(
+            max(-70.0, min(70.0, hedef_sol)),
+            max(-70.0, min(70.0, hedef_sag))
+        )
 
-        # Kalp atışı (Heartbeat) güncellemesi: İletişim koparsa sistem durur
-        pid_ctrl.last_heartbeat = time.time()
+        # Kalp atışı (Heartbeat) güncellemesi
+        pid_ctrl.update_heartbeat()
 
     def stop_motors(self):
         """Acil durumda veya kapanışta motorları tamamen durdurur."""
-        pid_ctrl.sp_l = 0.0
-        pid_ctrl.sp_r = 0.0
+        pid_ctrl.set_setpoints(0.0, 0.0)
         pid_ctrl.emergency_stop.set()
         self.get_logger().warn('🛑 Motorlar Güvenle Durduruldu.')
 

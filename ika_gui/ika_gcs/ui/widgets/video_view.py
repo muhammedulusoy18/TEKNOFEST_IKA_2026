@@ -44,3 +44,8 @@ class VideoView(QFrame):
                 qproperty-alignment: AlignCenter;
             }
         """)
+
+    def set_frame(self, pixmap):
+        from PyQt5.QtCore import Qt
+        scaled = pixmap.scaled(self.canvas.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        self.canvas.setPixmap(scaled)

@@ -17,10 +17,9 @@ class SensorNode(Node):
             self.get_logger().error(f'Donanım başlatılamadı: {e}')
 
         # 2. Yayıncılar (Publishers)
-        # Eğim verilerini (Roll, Pitch) yayınlar
         self.imu_publisher = self.create_publisher(Float32MultiArray, 'imu_data', 10)
-        # Sistem durumunu (Hata, Uyarı vb.) yayınlar
         self.status_publisher = self.create_publisher(String, 'system_status', 10)
+        self.telemetry_publisher = self.create_publisher(String, '/telemetry', 10)
 
         # 3. Sensör Okuma Döngüsü (50Hz - Zeynep'in orijinal ayarı)
         self.timer = self.create_timer(0.02, self.sensor_loop)
@@ -41,6 +40,21 @@ class SensorNode(Node):
                 status_msg.data = "CRITICAL_ANGLE"
                 self.status_publisher.publish(status_msg)
                 self.get_logger().warn('⚠️ KRİTİK EĞİM ALGILANDI!')
+
+            # Telemetry JSON Yayını (GCS İçin)
+            import json
+            import random  # Mock batarya/sıcaklık verisi için
+            telemetry_payload = {
+                "type": "TELEMETRY",
+                "roll": round(roll, 1),
+                "pitch": round(pitch, 1),
+                "battery": round(random.uniform(90.0, 95.0), 1),
+                "temp": round(random.uniform(40.0, 45.0), 1),
+                "state": "DRIVING"
+            }
+            tel_msg = String()
+            tel_msg.data = json.dumps(telemetry_payload)
+            self.telemetry_publisher.publish(tel_msg)
 
         except Exception as e:
             self.get_logger().error(f'Sensör döngü hatası: {e}')
