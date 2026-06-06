@@ -308,6 +308,8 @@ TEKNOFEST_IKA_2026/
 |------|-----|
 | **Yusuf Tufan** | Yazılım Geliştirici |
 | **Muhammed Ulusoy** | Yazılım Geliştirici |
+| **Zeynep** | Yazılım Geliştirici |
+| **Hatice** | Yazılım Geliştirici |
 
 ---
 
